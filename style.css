@@ -2021,3 +2021,153 @@ h3 {
   color: var(--text-main);
   font-style: normal;
 }
+
+/* ====================================================================
+   15. IMPORT/EXPORT & ABOUT MODAL STYLES
+   ==================================================================== */
+.import-btn,
+.export-btn,
+.about-terminal-btn {
+  background-color: rgba(148, 163, 184, 0.1);
+  border: 1px solid var(--text-muted);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.import-btn:hover,
+.export-btn:hover,
+.about-terminal-btn:hover {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+}
+
+.about-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.about-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--bg-primary);
+  border-radius: 4px;
+  border: 1px solid var(--border-ui);
+}
+.about-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.about-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-main);
+}
+.about-credit-block {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background-color: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-ui);
+  margin-bottom: 15px;
+}
+.about-developer-avatar {
+  font-size: 2.5rem;
+}
+.about-developer-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+.about-developer-role {
+  font-size: 0.85rem;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+.about-developer-contact {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.about-pp-studio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 15px;
+  border-top: 1px solid var(--border-ui);
+  border-bottom: 1px solid var(--border-ui);
+  margin-bottom: 15px;
+}
+.about-footer-legal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ====================================================================
+   16. ATTENDANCE SERVICE FILTER TABS
+   ==================================================================== */
+.attendance-service-filter-section {
+  margin-top: 30px;
+  border-top: 1px solid var(--border-ui);
+  padding-top: 20px;
+}
+.attendance-service-filter-section h4 {
+  font-size: 1rem;
+  color: var(--text-main);
+  margin-bottom: 15px;
+}
+.service-filter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 12px;
+  background-color: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-ui);
+}
+.service-tab-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.service-tab-filter {
+  background: none;
+  border: 1px solid var(--border-ui);
+  color: var(--text-muted);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.service-tab-filter:hover {
+  border-color: var(--accent-color);
+  color: var(--text-main);
+}
+.service-tab-filter.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+}

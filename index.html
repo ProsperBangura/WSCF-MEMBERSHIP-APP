@@ -106,6 +106,15 @@
         </div>
         <div class="header-control-block">
           <span class="status-badge online">Cloud Online</span>
+          <button class="about-terminal-btn" onclick="openAboutModal()" title="About Terminal">
+            ℹ️
+          </button>
+          <button class="import-btn" onclick="triggerImportData()" title="Import Data">
+            📥 Import
+          </button>
+          <button class="export-btn" onclick="exportAllData()" title="Export Data">
+            📤 Export
+          </button>
           <button class="lock-btn" onclick="relockTerminalWindow()">
             Lock Station
           </button>
@@ -165,9 +174,14 @@
             </div>
           </div>
 
-          <!-- Attendance History Section -->
-          <div class="attendance-history-section">
+          <!-- Attendance Filter by Service Tab -->
+          <div class="attendance-service-filter-section">
             <h4>📋 Attendance History Logs</h4>
+            <div class="service-filter-strip">
+              <div class="service-tab-filter-row" id="service-tab-filter-row">
+                <button class="service-tab-filter active" onclick="filterAttendanceByService('all', this)">All Logs</button>
+              </div>
+            </div>
             <div id="attendance-history-list" class="attendance-history-list"></div>
           </div>
         </div>
@@ -1014,6 +1028,57 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+    <!-- Hidden file input for JSON data import -->
+    <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="handleImportFile(event)" />
+
+    <!-- About Terminal Modal -->
+    <div id="aboutTerminalModal" class="modal-overlay" style="display: none">
+      <div class="modal-card" style="max-width: 560px;">
+        <div class="modal-header">
+          <div class="modal-header-content">
+            <div class="modal-profile-pic" style="background: none; font-size: 28px;">ℹ️</div>
+            <div>
+              <h3>About WSCF Terminal</h3>
+              <span class="modal-id-badge">Version 2.0.0</span>
+            </div>
+          </div>
+          <button class="modal-close-btn" onclick="closeAboutModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-section-title">System Parameters</div>
+          <div class="about-info-grid">
+            <div class="about-info-row"><span class="about-label">System Core</span><span class="about-value">WSCF Membership Management Engine</span></div>
+            <div class="about-info-row"><span class="about-label">Database Engine</span><span class="about-value">Supabase Cloud + localStorage Cache</span></div>
+            <div class="about-info-row"><span class="about-label">Storage Mode</span><span class="about-value">Hybrid (Cloud + Local Persistent Sync)</span></div>
+            <div class="about-info-row"><span class="about-label">Clearance Tiers</span><span class="about-value">2 (Standard Operator / Master Admin)</span></div>
+            <div class="about-info-row"><span class="about-label">Active Division</span><span class="about-value">HQ (Default Ministry Branch)</span></div>
+            <div class="about-info-row"><span class="about-label">Dept. Wings</span><span class="about-value">15 Active Ministry Departments</span></div>
+            <div class="about-info-row"><span class="about-label">PWA Support</span><span class="about-value">Enabled (Offline-Ready)</span></div>
+            <div class="about-info-row"><span class="about-label">Print Engine</span><span class="about-value">Hardware Direct-Output Canvas</span></div>
+          </div>
+
+          <div class="modal-section-title" style="margin-top: 20px;">Developer Credit</div>
+          <div class="about-credit-block">
+            <div class="about-developer-avatar">👨‍💻</div>
+            <div>
+              <div class="about-developer-name">Prosper Bangura</div>
+              <div class="about-developer-role">Lead Architect & Full-Stack Developer</div>
+              <div class="about-developer-contact">prosperbangura9@gmail.com</div>
+            </div>
+          </div>
+
+          <div class="about-pp-studio">
+            <span class="pp-studio-logo" style="font-size: 0.9rem;">PP Studio</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Creative Control & System Architecture</span>
+          </div>
+
+          <div class="about-footer-legal">
+            <span>© 2026 WSCF Terminal. All rights reserved.</span>
+            <span>Designed Under Creative Control of Prosper Bangura (PP Studio)</span>
+          </div>
+        </div>
       </div>
     </div>
 

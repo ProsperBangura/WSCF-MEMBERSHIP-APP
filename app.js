@@ -761,7 +761,7 @@ function getAttendanceHistory() {
   return raw ? JSON.parse(raw) : [];
 }
 
-// Render attendance history logs
+// Render attendance history logs (with service filter support)
 function renderAttendanceHistory() {
   const container = document.getElementById("attendance-history-list");
   if (!container) return;
@@ -773,10 +773,23 @@ function renderAttendanceHistory() {
     return;
   }
 
+  // Rebuild service filter tabs
+  rebuildServiceFilterTabs(history);
+
   // Show newest first
   const sorted = [...history].reverse();
 
-  container.innerHTML = sorted.map(h => {
+  // Apply service filter if set
+  const filtered = activeAttendanceFilter && activeAttendanceFilter !== "all"
+    ? sorted.filter(h => h.date === activeAttendanceFilter || h.wing === activeAttendanceFilter)
+    : sorted;
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="text-muted">No attendance logs match the selected filter.</p>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(h => {
     const present = (h.records || []).filter(r => r.status === "Present").length;
     const absent = (h.records || []).filter(r => r.status === "Absent").length;
     const excused = (h.records || []).filter(r => r.status === "Excused").length;
@@ -795,6 +808,41 @@ function renderAttendanceHistory() {
       </div>
     `;
   }).join("");
+}
+
+// Dynamically rebuild service filter tabs from history data
+function rebuildServiceFilterTabs(history) {
+  const filterRow = document.getElementById("service-tab-filter-row");
+  if (!filterRow) return;
+
+  // Collect unique services (date+wing combinations)
+  const services = [];
+  const seen = new Set();
+  history.forEach(h => {
+    const key = `${h.date}|${h.wing}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      services.push({ date: h.date, wing: h.wing });
+    }
+  });
+
+  // Keep "All Logs" button
+  let html = '<button class="service-tab-filter active" onclick="filterAttendanceByService(\'all\', this)">All Logs</button>';
+
+  // Add date-based filter buttons
+  const dateGroups = {};
+  services.forEach(s => {
+    if (!dateGroups[s.date]) dateGroups[s.date] = [];
+    dateGroups[s.date].push(s.wing);
+  });
+
+  Object.keys(dateGroups).sort().reverse().forEach(date => {
+    const wings = dateGroups[date];
+    const label = `${date} (${wings.length} wings)`;
+    html += `<button class="service-tab-filter" onclick="filterAttendanceByService('${date}', this)">📅 ${escapeHtml(label)}</button>`;
+  });
+
+  filterRow.innerHTML = html;
 }
 
 function loadNonWorkersPanelRegistry() {
@@ -1348,9 +1396,16 @@ function populateDropdownSelectionSelectors() {
 }
 
 // ====================================================================
-// 11. HARDWARE DIRECT-TO-PRINT CONFIGURATION LOGIC
+// 11. HARDWARE DIRECT-TO-PRINT CONFIGURATION LOGIC (with timestamped PDF naming)
 // ====================================================================
+
+// Helper to set document title for unique PDF naming
+function setPrintTitle(prefix) {
+  document.title = `${prefix}_${getTimestampForFilename()}`;
+}
+
 async function triggerProfilePrint() {
+  setPrintTitle("ProfileCard");
   const memberId = document.getElementById("print-member-selector").value;
   if (!memberId) return;
 
@@ -1386,6 +1441,7 @@ async function triggerProfilePrint() {
 }
 
 async function triggerDepartmentRollPrint() {
+  setPrintTitle("WingRoll");
   const deptName = document.getElementById("print-dept-selector").value;
   const canvas = document.getElementById("print-hardware-canvas");
 
@@ -1433,6 +1489,7 @@ async function triggerDepartmentRollPrint() {
 }
 
 async function triggerVisitorListPrint() {
+  setPrintTitle("VisitorLedger");
   const canvas = document.getElementById("print-hardware-canvas");
   
   // Attempt to get visitors from Supabase
@@ -1501,6 +1558,7 @@ async function triggerVisitorListPrint() {
 }
 
 async function triggerFinancialStatementPrint() {
+  setPrintTitle("FinancialVoucher");
   const canvas = document.getElementById("print-hardware-canvas");
   
   // Attempt to get logs from Supabase
@@ -1579,6 +1637,221 @@ async function triggerFinancialStatementPrint() {
         </table>
     `;
   window.print();
+}
+
+// ====================================================================
+// 12. IMPORT / EXPORT JSON DATA HANDLERS
+// ====================================================================
+
+// Export all localStorage data as a downloadable JSON file
+function exportAllData() {
+  try {
+    const exportData = {
+      exportTimestamp: new Date().toISOString(),
+      exportVersion: "2.0.0",
+      members: JSON.parse(localStorage.getItem("wscf_members") || "[]"),
+      visitors: JSON.parse(localStorage.getItem("wscf_first_time_visitors") || "[]"),
+      financialRecords: JSON.parse(localStorage.getItem("wscf_financial_records") || "[]"),
+      attendanceHistory: JSON.parse(localStorage.getItem(LS_ATTENDANCE_HISTORY) || "[]"),
+    };
+
+    const timestamp = getTimestampForFilename();
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `WSCF_Backup_${timestamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    alert(`✅ System data exported successfully as WSCF_Backup_${timestamp}.json`);
+  } catch (error) {
+    console.error("Export failed:", error);
+    alert("❌ Export failed. Please check console for details.");
+  }
+}
+
+// Trigger hidden file input for import
+function triggerImportData() {
+  document.getElementById("import-file-input").click();
+}
+
+// Handle imported JSON file
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      if (!data || typeof data !== "object") {
+        alert("❌ Invalid backup file format.");
+        return;
+      }
+
+      let importCount = 0;
+
+      // Import members
+      if (Array.isArray(data.members)) {
+        localStorage.setItem("wscf_members", JSON.stringify(data.members));
+        importCount += data.members.length;
+      }
+
+      // Import visitors
+      if (Array.isArray(data.visitors)) {
+        localStorage.setItem("wscf_first_time_visitors", JSON.stringify(data.visitors));
+        importCount += data.visitors.length;
+      }
+
+      // Import financial records
+      if (Array.isArray(data.financialRecords)) {
+        localStorage.setItem("wscf_financial_records", JSON.stringify(data.financialRecords));
+        importCount += data.financialRecords.length;
+      }
+
+      // Import attendance history
+      if (Array.isArray(data.attendanceHistory)) {
+        localStorage.setItem(LS_ATTENDANCE_HISTORY, JSON.stringify(data.attendanceHistory));
+        importCount += data.attendanceHistory.length;
+      }
+
+      alert(`✅ Import successful! ${importCount} records restored from backup.`);
+
+      // Refresh all UI panels if user is in the dashboard
+      if (document.getElementById("dashboard-screen").style.display !== "none") {
+        if (currentClearanceLevel === 1) {
+          renderAttendanceHistory();
+        } else if (currentClearanceLevel === 2) {
+          loadAllMasterLedgerData();
+        }
+      }
+
+      // Reload first-time visitors display
+      renderFirstTimeVisitors();
+      renderAttendanceHistory();
+    } catch (parseError) {
+      console.error("Import parse error:", parseError);
+      alert("❌ Failed to parse backup file. Ensure it is a valid JSON export.");
+    }
+  };
+  reader.readAsText(file);
+
+  // Reset input so same file can be re-imported
+  event.target.value = "";
+}
+
+// ====================================================================
+// ABOUT TERMINAL MODAL
+// ====================================================================
+function openAboutModal() {
+  const modal = document.getElementById("aboutTerminalModal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeAboutModal() {
+  const modal = document.getElementById("aboutTerminalModal");
+  if (modal) modal.style.display = "none";
+}
+
+// Click overlay to close about modal
+document.addEventListener("DOMContentLoaded", () => {
+  const aboutModal = document.getElementById("aboutTerminalModal");
+  if (aboutModal) {
+    aboutModal.addEventListener("click", function (e) {
+      if (e.target === this) closeAboutModal();
+    });
+  }
+});
+
+// ====================================================================
+// ATTENDANCE SERVICE FILTER (VIEW BY SERVICE)
+// ====================================================================
+let activeAttendanceFilter = "all";
+
+function filterAttendanceByService(serviceKey, btnElement) {
+  activeAttendanceFilter = serviceKey;
+
+  // Update active tab styling
+  const filterRow = document.getElementById("service-tab-filter-row");
+  if (filterRow) {
+    filterRow.querySelectorAll(".service-tab-filter").forEach(btn => btn.classList.remove("active"));
+    if (btnElement) btnElement.classList.add("active");
+  }
+
+  renderAttendanceHistory();
+}
+
+// Helper to generate timestamp-based filenames
+function getTimestampForFilename() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const h = String(now.getHours()).padStart(2, "0");
+  const min = String(now.getMinutes()).padStart(2, "0");
+  const s = String(now.getSeconds()).padStart(2, "0");
+  return `${y}${m}${d}_${h}${min}${s}`;
+}
+
+// ====================================================================
+// MEMBER SEARCH BAR REACTIVE FILTERING (FIX)
+// ====================================================================
+document.addEventListener("DOMContentLoaded", () => {
+  const searchBar = document.getElementById("member-search-bar");
+  if (searchBar) {
+    searchBar.addEventListener("input", function () {
+      filterMemberLedger(this.value.trim().toLowerCase());
+    });
+  }
+});
+
+function filterMemberLedger(query) {
+  const box = document.getElementById("master-ledger-container");
+  const membersRaw = localStorage.getItem("wscf_members");
+  const members = membersRaw ? JSON.parse(membersRaw) : [];
+
+  if (!members || members.length === 0) {
+    box.innerHTML = "<p class='text-muted'>No member card files compiled in storage.</p>";
+    return;
+  }
+
+  const filtered = query
+    ? members.filter(m => {
+        const name = `${m.first_name || ""} ${m.last_name || ""}`.toLowerCase();
+        const code = (m.member_id_code || "").toLowerCase();
+        const phone = (m.contact_number_1 || "").toLowerCase();
+        return name.includes(query) || code.includes(query) || phone.includes(query);
+      })
+    : members;
+
+  if (filtered.length === 0) {
+    box.innerHTML = `<p class='text-muted'>No members match "<strong>${escapeHtml(query)}</strong>".</p>`;
+    return;
+  }
+
+  const sorted = [...filtered].sort((a, b) => b.local_id - a.local_id);
+  box.innerHTML = sorted
+    .map(
+      (m) => `
+        <div class="record-card">
+            <div class="record-avatar" style="background-image: url('${m.photo_data || ""}')">${m.photo_data ? "" : "👤"}</div>
+            <div class="record-details">
+                <div class="record-title">${m.first_name} ${m.last_name}</div>
+                <div class="record-sub"><span>ID: ${m.member_id_code}</span> | <span>Contact: ${m.contact_number_1}</span></div>
+                <div class="record-sub"><span>Baptized: ${m.baptized}</span> | <span>Marital: ${m.marital_status}</span></div>
+            </div>
+            <div class="record-actions-cluster">
+                <button class="rec-btn view" onclick="openMemberDetailModal(${m.local_id})">View / Edit</button>
+                <button class="rec-btn delete" onclick="deleteMemberProfileCard(${m.local_id})">Delete</button>
+            </div>
+        </div>
+    `,
+    )
+    .join("");
 }
 
 // ====================================================================
