@@ -231,10 +231,36 @@ h3 {
   align-items: center;
 }
 
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+}
+
 .header-branding-block {
   display: flex;
   align-items: center;
   gap: 15px;
+}
+
+@media (max-width: 768px) {
+  .header-branding-block {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .header-branding-block > div {
+    text-align: center;
+  }
+
+  .app-header h1 {
+    font-size: 1rem;
+  }
 }
 .header-emblem {
   width: 42px;
@@ -264,6 +290,15 @@ h3 {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .header-control-block {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
 }
 .status-badge {
   font-size: 0.8rem;
@@ -325,12 +360,24 @@ h3 {
   width: 100%;
   margin: 0 auto;
 }
+
+@media (max-width: 768px) {
+  .workspace-area {
+    padding: 12px;
+  }
+}
 .app-panel {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-ui);
   border-radius: 10px;
   padding: 25px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 768px) {
+  .app-panel {
+    padding: 16px;
+  }
 }
 .panel-header {
   margin-bottom: 25px;
@@ -626,6 +673,15 @@ h3 {
   margin-top: 10px;
 }
 
+@media (max-width: 768px) {
+  .attendance-actions-row {
+    justify-content: stretch;
+  }
+  .attendance-actions-row .save-btn {
+    width: 100%;
+  }
+}
+
 .attendance-actions-row .save-btn {
   width: auto;
   padding: 12px 32px;
@@ -802,6 +858,17 @@ h3 {
   overflow-x: auto;
   padding-bottom: 4px;
 }
+
+@media (max-width: 768px) {
+  .internal-nav-bar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .nav-tab-link {
+    font-size: 0.8rem;
+    padding: 8px 12px;
+  }
+}
 .nav-tab-link {
   background: none;
   border: none;
@@ -856,6 +923,20 @@ h3 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 15px;
+}
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .full-width {
+    grid-column: 1;
+  }
+  .section-divider {
+    grid-column: 1;
+  }
+  .checkbox-department-selection-block {
+    grid-column: 1;
+  }
 }
 .full-width {
   grid-column: span 2;
@@ -1290,6 +1371,19 @@ h3 {
   color: var(--text-muted);
   margin-top: auto;
 }
+
+@media (max-width: 768px) {
+  .app-footer {
+    flex-direction: column;
+    text-align: center;
+    padding: 12px 16px;
+  }
+  .app-footer > div {
+    text-align: center;
+    white-space: normal;
+  }
+}
+
 .app-footer > div {
   text-align: right;
   white-space: nowrap;

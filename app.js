@@ -1630,3 +1630,44 @@ function clearRegistryFormFields() {
   box.style.backgroundImage = "none";
   box.innerHTML = `<span class="upload-icon">📷</span><span>Upload Member Photo</span>`;
 }
+
+// ====================================================================
+// PWA SERVICE WORKER REGISTRATION
+// ====================================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then((registration) => {
+        console.log('[App] Service Worker registered successfully:', registration.scope);
+        
+        // Check for updates on page navigation
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New update available
+              console.log('[App] New version available. Please refresh.');
+              if (confirm('A new version of WSCF Terminal is available. Reload to update?')) {
+                newWorker.postMessage({ action: 'skipWaiting' });
+                window.location.reload();
+              }
+            }
+          });
+        });
+      })
+      .catch((error) => {
+        console.error('[App] Service Worker registration failed:', error);
+      });
+
+    // Handle controller change (new SW takes over)
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+  });
+} else {
+  console.log('[App] Service Workers not supported in this browser.');
+}
