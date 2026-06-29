@@ -110,121 +110,53 @@
           style="display: none"
         >
           <div class="panel-header">
-            <h3>WSCF Membership Management Terminal</h3>
+            <h3>WSCF Attendance Management Terminal</h3>
             <p>
-              Two-step workflow for departmental management and service
-              attendance.
+              Three-step persistent attendance tracking across all ministry wings.
+              Each service day generates an independent, immutable log.
             </p>
           </div>
 
-          <div class="step-tabs">
-            <button class="step-tab active" onclick="switchStepTab('step1')">
-              STEP 1: Departmental Roster
-            </button>
-            <button class="step-tab" onclick="switchStepTab('step2')">
-              STEP 2: Service Roll Call
-            </button>
-          </div>
-
-          <div id="step1-panel" class="step-content-pane">
-            <div class="department-filter-strip">
-              <label for="step1-dept-selector">Select Department:</label>
-              <select
-                id="step1-dept-selector"
-                onchange="loadStep1DepartmentRoster()"
-              >
-                <option value="1">Music Team</option>
-                <option value="2">Media & IT Team</option>
-                <option value="3">Ushering Wing</option>
-                <option value="4">Intercessory Ministry</option>
-                <option value="5">Protocol & Security</option>
-                <option value="6">Welfare & Hospitality</option>
-                <option value="7">Sunday School Teachers</option>
-                <option value="8">Evangelism & Outreach</option>
-                <option value="9">Sanctuary Cleaners</option>
-                <option value="10">Counseling & Follow-Up</option>
-                <option value="11">Men's Fellowship</option>
-                <option value="12">Women's Fellowship</option>
+          <!-- Step 2 (combined): Department Filter + Attendance Grid -->
+          <div class="attendance-controls">
+            <div class="dept-filter-row">
+              <label for="attendance-dept-select">Select Department:</label>
+              <select id="attendance-dept-select" onchange="renderAttendanceGrid()">
+                <option value="">-- Choose a Wing --</option>
+                <option value="Music Team">Music Team</option>
+                <option value="Media & IT Team">Media & IT Team</option>
+                <option value="Ushering Wing">Ushering Wing</option>
+                <option value="Intercessory Ministry">Intercessory Ministry</option>
+                <option value="Protocol & Security">Protocol & Security</option>
+                <option value="Welfare & Hospitality">Welfare & Hospitality</option>
+                <option value="Sunday School Teachers">Sunday School Teachers</option>
+                <option value="Evangelism & Outreach">Evangelism & Outreach</option>
+                <option value="Sanctuary Cleaners">Sanctuary Cleaners</option>
+                <option value="Counseling & Follow-Up">Counseling & Follow-Up</option>
+                <option value="Men's Fellowship">Men's Fellowship</option>
+                <option value="Women's Fellowship">Women's Fellowship</option>
+                <option value="Youth Fellowship">Youth Fellowship</option>
+                <option value="Teens Fellowship">Teens Fellowship</option>
+                <option value="Young Adult Fellowship">Young Adult Fellowship</option>
               </select>
+              <span id="attendance-date-badge" class="date-badge"></span>
             </div>
-            <div class="add-member-input-row">
-              <input
-                type="text"
-                id="memberNameInput"
-                placeholder="Member Full Name"
-              />
-              <input
-                type="text"
-                id="memberPhoneInput"
-                placeholder="Phone Number"
-              />
-              <button
-                type="button"
-                id="addMemberBtn"
-                onclick="addStep1Member()"
-              >
-                Add Member
+
+            <div id="attendance-grid-container" class="attendance-grid-wrapper">
+              <p class="text-muted">Select a department above to load the attendance roster.</p>
+            </div>
+
+            <div class="attendance-actions-row">
+              <button type="button" class="save-btn" onclick="saveAttendance()" id="save-attendance-btn">
+                💾 Save Attendance Log
               </button>
             </div>
-            <div id="rosterListContainer" class="roster-table-container"></div>
           </div>
 
-          <div id="step2-panel" class="step-content-pane" style="display: none">
-            <div class="service-info-strip">
-              <div class="input-field">
-                <label for="service-name-input">Service Name / Theme</label>
-                <input
-                  type="text"
-                  id="service-name-input"
-                  placeholder="e.g. Sunday Service"
-                />
-              </div>
-              <div class="input-field">
-                <label for="service-date-input">Service Date</label>
-                <input type="date" id="service-date-input" />
-              </div>
-            </div>
-            <div class="department-filter-strip">
-              <label for="step2-dept-selector">Select Department:</label>
-              <select
-                id="step2-dept-selector"
-                onchange="loadStep2AttendanceList()"
-              >
-                <option value="1">Music Team</option>
-                <option value="2">Media & IT Team</option>
-                <option value="3">Ushering Wing</option>
-                <option value="4">Intercessory Ministry</option>
-                <option value="5">Protocol & Security</option>
-                <option value="6">Welfare & Hospitality</option>
-                <option value="7">Sunday School Teachers</option>
-                <option value="8">Evangelism & Outreach</option>
-                <option value="9">Sanctuary Cleaners</option>
-                <option value="10">Counseling & Follow-Up</option>
-                <option value="11">Men's Fellowship</option>
-                <option value="12">Women's Fellowship</option>
-              </select>
-            </div>
-            <div
-              id="step2-attendance-container"
-              class="attendance-list-container"
-            ></div>
-            <button
-              type="button"
-              class="save-btn mt-20"
-              onclick="commitStep2Attendance()"
-            >
-              Commit Roll Ledger to Cloud
-            </button>
-            <div
-              id="attendanceHistoryContainer"
-              class="attendance-history-container"
-            >
-              <h4>Saved Attendance History</h4>
-              <div
-                id="attendanceHistoryList"
-                class="attendance-history-list"
-              ></div>
-            </div>
+          <!-- Attendance History Section -->
+          <div class="attendance-history-section">
+            <h4>📋 Attendance History Logs</h4>
+            <div id="attendance-history-list" class="attendance-history-list"></div>
           </div>
         </div>
 

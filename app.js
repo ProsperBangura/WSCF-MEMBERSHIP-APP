@@ -56,8 +56,6 @@ function handleEmailSignIn(e) {
 window.addEventListener("DOMContentLoaded", async () => {
   initializeLocalStorageKeys();
   // Initialize dashboard data on page load (login screen stays visible until user submits)
-  await loadStep1DepartmentDropdown();
-  await loadStep2DepartmentDropdown();
   renderFirstTimeVisitors();
 });
 
@@ -120,11 +118,9 @@ async function initializeWorkspaceDashboard() {
     document.getElementById("pastoral-care-alerts-panel").style.display =
       "none";
     document.getElementById("tier2-master-panel").style.display = "none";
-    await loadStep1DepartmentDropdown();
-    await loadStep2DepartmentDropdown();
-    // Set default date to today
-    const dateInput = document.getElementById("service-date-input");
-    if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+    // Initialize attendance UI with today's date badge
+    updateDateBadge();
+    renderAttendanceHistory();
   } else if (currentClearanceLevel === 2) {
     badge.innerText = "Clearance: Master Admin (Full Oversight Unlocked)";
     badge.style.borderColor = "#3b82f6";
@@ -445,15 +441,34 @@ async function refreshFinancialAnalytics() {
 
     const { data: logs, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      console.warn("Supabase financial analytics query failed, using localStorage only:", error.message);
+    }
 
     // Merge cloud logs with local localStorage records for complete analytics
     const localRecordsRaw = localStorage.getItem("wscf_financial_records");
     const localRecords = localRecordsRaw ? JSON.parse(localRecordsRaw) : [];
+
+    // Combine Supabase and localStorage data
     const allRecords = [...(logs || []), ...localRecords];
 
+    // Apply the same date filter to localStorage records if date filters are active
+    let filteredRecords = allRecords;
+    if (startDateInput && startDateInput.trim() !== "") {
+      filteredRecords = filteredRecords.filter((r) => {
+        const recordDate = r.date_logged;
+        return recordDate && recordDate >= startDateInput.trim();
+      });
+    }
+    if (endDateInput && endDateInput.trim() !== "") {
+      filteredRecords = filteredRecords.filter((r) => {
+        const recordDate = r.date_logged;
+        return recordDate && recordDate <= endDateInput.trim();
+      });
+    }
+
     // Calculate metrics with defensive numeric parsing
-    const metrics = allRecords.reduce(
+    const metrics = filteredRecords.reduce(
       (acc, record) => {
         const numericValue =
           parseFloat(String(record.amount || 0).replace(/[^0-9.]/g, "")) || 0;
@@ -493,25 +508,8 @@ async function refreshFinancialAnalytics() {
 }
 
 // ====================================================================
-// 8. TWO-STEP WORKFLOW: DEPARTMENTAL ROSTER & ATTENDANCE
+// 8. NEW 3-STEP ATTENDANCE SYSTEM (Roster, Grid, Save)
 // ====================================================================
-
-// Step Tab Switching
-function switchStepTab(step) {
-  document.getElementById("step1-panel").style.display =
-    step === "step1" ? "block" : "none";
-  document.getElementById("step2-panel").style.display =
-    step === "step2" ? "block" : "none";
-
-  const tabs = document.querySelectorAll(".step-tab");
-  tabs.forEach((t) => t.classList.remove("active"));
-  if (step === "step1") tabs[0].classList.add("active");
-  else tabs[1].classList.add("active");
-
-  if (step === "step2") {
-    refreshAttendanceHistoryView();
-  }
-}
 
 // Return to Standard Attendance Terminal (Clearance Level 1)
 async function returnToAttendanceTerminal() {
@@ -530,292 +528,258 @@ async function returnToAttendanceTerminal() {
   badge.style.borderColor = "#10b981";
   badge.style.color = "#10b981";
 
-  // Load standard mode dropdowns
-  await loadStep1DepartmentDropdown();
-  await loadStep2DepartmentDropdown();
-
-  // Reset to step 1
-  switchStepTab("step1");
+  // Re-initialize attendance UI
+  updateDateBadge();
+  renderAttendanceHistory();
 }
 
-// STEP 1: Department Dropdown & Roster Management
-async function loadStep1DepartmentDropdown() {
-  // HARD OVERRIDE: Dropdown options are now static in HTML.
-  // Do not modify the Step 1 department selector.
-  return;
+// Normalize department name for resilient comparison (handles underscores, spaces, casing, & vs and)
+function normalizeDeptName(name) {
+  return String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/[_\-\s]+/g, ' ')  // replace underscores, hyphens, spaces with single space
+    .replace(/&/g, 'and')        // normalize & to "and"
+    .trim();
 }
 
-function getStep1DeptKey() {
-  const deptId = document.getElementById("step1-dept-selector").value;
-  return LS_DEPT_MEMBERS_PREFIX + deptId;
-}
+// STEP 1: Get filtered members from wscf_members registry by department (wing)
+function getMembersByDepartment(departmentName) {
+  const membersRaw = localStorage.getItem("wscf_members");
+  if (!membersRaw) return [];
+  const members = JSON.parse(membersRaw);
+  if (!Array.isArray(members)) return [];
 
-function getStep1Members() {
-  const key = getStep1DeptKey();
-  const raw = localStorage.getItem(key);
-  return raw ? JSON.parse(raw) : [];
-}
+  // Normalize department name for comparison (handles underscores, spaces, casing)
+  const dept = normalizeDeptName(departmentName);
 
-function setStep1Members(list) {
-  const key = getStep1DeptKey();
-  localStorage.setItem(key, JSON.stringify(list));
-}
-
-function renderStep1Roster(members) {
-  const container = document.getElementById("rosterListContainer");
-  if (!members || members.length === 0) {
-    container.innerHTML =
-      "<p class='text-muted'>No members registered in this department yet.</p>";
-    return;
-  }
-
-  container.innerHTML = `
-    <table class="roster-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Member Name</th>
-          <th>Phone Number</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${members
-          .map(
-            (m, idx) => `
-          <tr data-index="${idx}">
-            <td>${idx + 1}</td>
-            <td>
-              <input type="text" class="inline-edit" data-field="name" value="${escapeHtml(m.name)}" />
-            </td>
-            <td>
-              <input type="text" class="inline-edit" data-field="phone" value="${escapeHtml(m.phone || "")}" />
-            </td>
-            <td>
-              <button class="rec-btn save-row" onclick="saveStep1Row(${idx})">Save</button>
-              <button class="rec-btn delete" onclick="deleteStep1Member(${idx})">Delete</button>
-            </td>
-          </tr>
-        `,
-          )
-          .join("")}
-      </tbody>
-    </table>
-  `;
-}
-
-function escapeHtml(text) {
-  return (text || "")
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/"/g, '"')
-    .replace(/'/g, "&#039;");
-}
-
-function loadStep1DepartmentRoster() {
-  const deptId = document.getElementById("step1-dept-selector").value;
-  const container = document.getElementById("rosterListContainer");
-  if (!deptId) {
-    container.innerHTML = "";
-    return;
-  }
-
-  container.innerHTML = "Loading departmental roster...";
-  const members = getStep1Members();
-  renderStep1Roster(members);
-}
-
-function saveStep1Row(index) {
-  const row = document.querySelector(`tr[data-index="${index}"]`);
-  if (!row) return;
-
-  const nameInput = row.querySelector('input[data-field="name"]');
-  const phoneInput = row.querySelector('input[data-field="phone"]');
-
-  const name = nameInput ? nameInput.value.trim() : "";
-  const phone = phoneInput ? phoneInput.value.trim() : "";
-
-  if (!name) {
-    alert("Member name is required.");
-    return;
-  }
-
-  const members = getStep1Members();
-  if (!members[index]) return;
-
-  members[index] = { ...members[index], name, phone };
-  setStep1Members(members);
-
-  renderStep1Roster(members);
-  alert("Member updated.");
-}
-
-function deleteStep1Member(index) {
-  if (!confirm("Permanently remove this member from this department roster?"))
-    return;
-
-  const members = getStep1Members();
-  members.splice(index, 1);
-  setStep1Members(members);
-
-  renderStep1Roster(members);
-}
-
-function addStep1Member() {
-  const nameInput = document.getElementById("memberNameInput");
-  const phoneInput = document.getElementById("memberPhoneInput");
-
-  const name = nameInput ? nameInput.value.trim() : "";
-  const phone = phoneInput ? phoneInput.value.trim() : "";
-
-  if (!name) {
-    alert("Please enter the member's full name.");
-    return;
-  }
-
-  const members = getStep1Members();
-  members.push({ name, phone });
-  setStep1Members(members);
-
-  if (nameInput) nameInput.value = "";
-  if (phoneInput) phoneInput.value = "";
-
-  renderStep1Roster(members);
-}
-
-async function saveStep1Changes() {
-  // Changes are auto-saved in localStorage via per-row actions and Add Member.
-  alert("Roster changes are saved automatically to local device storage.");
-}
-
-// STEP 2: Attendance Logging
-async function loadStep2DepartmentDropdown() {
-  // HARD OVERRIDE: Dropdown options are now static in HTML.
-  // Do not modify the Step 2 department selector.
-  return;
-}
-
-function getStep2DeptKey() {
-  const deptId = document.getElementById("step2-dept-selector").value;
-  return LS_DEPT_MEMBERS_PREFIX + deptId;
-}
-
-function loadStep2AttendanceList() {
-  const deptId = document.getElementById("step2-dept-selector").value;
-  const container = document.getElementById("step2-attendance-container");
-  if (!deptId) {
-    container.innerHTML = "";
-    return;
-  }
-
-  container.innerHTML = "Loading attendance list...";
-
-  const members = getStep1Members();
-  if (!members || members.length === 0) {
-    container.innerHTML =
-      "<p class='text-muted'>No members in this department roster.</p>";
-    return;
-  }
-
-  container.innerHTML = `
-    <p class="text-muted" style="margin-bottom: 10px;">
-      Mark attendance below. This checklist reflects the current saved roster for this department.
-    </p>
-    <div class="checklist-matrix">
-      ${members
-        .map(
-          (m, idx) => `
-        <div class="attendance-row-item">
-          <span>${escapeHtml(m.name)}</span>
-          <input type="checkbox" class="attendance-check" data-index="${idx}" checked />
-        </div>
-      `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function commitStep2Attendance() {
-  const deptId = document.getElementById("step2-dept-selector").value;
-  const serviceName = document
-    .getElementById("service-name-input")
-    .value.trim();
-  const serviceDate = document.getElementById("service-date-input").value;
-
-  if (!serviceName || !serviceDate) {
-    alert("Service name and date are required.");
-    return;
-  }
-
-  const checkboxes = document.querySelectorAll(".attendance-check");
-  if (checkboxes.length === 0) {
-    alert("No members to record attendance for.");
-    return;
-  }
-
-  const members = getStep1Members();
-  const presentMembers = [];
-
-  Array.from(checkboxes).forEach((box) => {
-    const idx = parseInt(box.getAttribute("data-index"), 10);
-    if (box.checked && members[idx]) {
-      presentMembers.push(members[idx].name);
-    }
+  return members.filter((m) => {
+    // Check in departments array (handles both "youth_fellowship" and "Youth Fellowship" formats)
+    const inDepts = (m.departments || []).some(
+      (d) => normalizeDeptName(d) === dept
+    );
+    // Check in wings object
+    const inWings = m.wings && Object.entries(m.wings).some(
+      ([key, val]) => val === true && normalizeDeptName(convertWingKeyToDeptName(key)) === dept
+    );
+    return inDepts || inWings;
   });
+}
 
+// Helper to map wing keys back to dropdown names
+function convertWingKeyToDeptName(key) {
+  const wingMap = {
+    media: "Media & IT Team",
+    youth: "Youth Fellowship",
+    teens: "Teens Fellowship",
+    youngAdult: "Young Adult Fellowship"
+  };
+  return wingMap[key] || key;
+}
+
+// Update the date badge with today's date
+function updateDateBadge() {
+  const badge = document.getElementById("attendance-date-badge");
+  if (badge) {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    badge.textContent = `📅 ${today}`;
+  }
+}
+
+// Get today's date string
+function getTodayDateString() {
+  return new Date().toISOString().split("T")[0];
+}
+
+// STEP 2: Render attendance grid for selected department
+function renderAttendanceGrid() {
+  const deptSelect = document.getElementById("attendance-dept-select");
+  const container = document.getElementById("attendance-grid-container");
+  const deptName = deptSelect.value;
+
+  // Clear previous grid
+  container.innerHTML = "";
+
+  if (!deptName) {
+    container.innerHTML = '<p class="text-muted">Select a department above to load the attendance roster.</p>';
+    return;
+  }
+
+  // Check if today already has a saved log for this wing
+  const today = getTodayDateString();
   const history = getAttendanceHistory();
-  history.unshift({
-    date: serviceDate,
-    service: serviceName,
-    department: document.getElementById("step2-dept-selector")
-      .selectedOptions[0].text,
-    presentCount: presentMembers.length,
-    presentMembers,
+  const existingLog = history.find(h => h.date === today && h.wing === deptName);
+
+  // Get members from registry
+  const members = getMembersByDepartment(deptName);
+
+  if (!members || members.length === 0) {
+    container.innerHTML = `<p class="text-muted">No members registered under "${escapeHtml(deptName)}" in the Member Registry.</p>`;
+    return;
+  }
+
+  // Build grid table
+  let gridHtml = `<table class="attendance-grid">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Member ID</th>
+        <th>Member Name</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  members.forEach((m, idx) => {
+    const memberId = m.member_id_code || "N/A";
+    const memberName = `${m.first_name || ""} ${m.last_name || ""}`.trim() || "Unknown";
+
+    // If existing log found for today, restore saved status
+    let savedStatus = "Present"; // default
+    if (existingLog && existingLog.records) {
+      const saved = existingLog.records.find(r => r.memberId === memberId);
+      if (saved) {
+        savedStatus = saved.status;
+      }
+    }
+
+    gridHtml += `<tr data-member-id="${escapeHtml(memberId)}">
+      <td>${idx + 1}</td>
+      <td>${escapeHtml(memberId)}</td>
+      <td>${escapeHtml(memberName)}</td>
+      <td>
+        <div class="status-toggle-group">
+          <button type="button" class="status-btn ${savedStatus === "Present" ? "active-present" : ""}" onclick="setMemberStatus(this, 'Present')">✅ Present</button>
+          <button type="button" class="status-btn ${savedStatus === "Absent" ? "active-absent" : ""}" onclick="setMemberStatus(this, 'Absent')">❌ Absent</button>
+          <button type="button" class="status-btn ${savedStatus === "Excused" ? "active-excused" : ""}" onclick="setMemberStatus(this, 'Excused')">⚠️ Excused</button>
+        </div>
+      </td>
+    </tr>`;
   });
 
-  setAttendanceHistory(history);
-  refreshAttendanceHistoryView();
+  gridHtml += `</tbody></table>`;
+  container.innerHTML = gridHtml;
+}
 
+// Handle status toggle button clicks
+function setMemberStatus(btn, status) {
+  const group = btn.closest(".status-toggle-group");
+  if (!group) return;
+
+  // Deactivate all buttons in the group
+  group.querySelectorAll(".status-btn").forEach(b => {
+    b.className = "status-btn";
+  });
+
+  // Activate the clicked button with appropriate class
+  const activeClass = status === "Present" ? "active-present" : status === "Absent" ? "active-absent" : "active-excused";
+  btn.classList.add(activeClass);
+}
+
+// STEP 3: Save attendance log
+function saveAttendance() {
+  const deptSelect = document.getElementById("attendance-dept-select");
+  const deptName = deptSelect.value;
+
+  if (!deptName) {
+    alert("Please select a department first.");
+    return;
+  }
+
+  const grid = document.querySelector("#attendance-grid-container .attendance-grid");
+  if (!grid) {
+    alert("No attendance grid loaded. Select a department with registered members.");
+    return;
+  }
+
+  const rows = grid.querySelectorAll("tbody tr");
+  if (rows.length === 0) {
+    alert("No members found in the grid.");
+    return;
+  }
+
+  const today = getTodayDateString();
+
+  // Loop through rows and gather status
+  const records = [];
+  rows.forEach(row => {
+    const memberId = row.getAttribute("data-member-id") || "N/A";
+    const nameCell = row.cells[2];
+    const memberName = nameCell ? nameCell.textContent.trim() : "Unknown";
+
+    // Find active status button
+    const activeBtn = row.querySelector(".status-btn.active-present, .status-btn.active-absent, .status-btn.active-excused");
+    const status = activeBtn ? activeBtn.textContent.trim().replace(/[✅❌⚠️]/g, "").trim() : "Present";
+
+    records.push({ memberId, name: memberName, status });
+  });
+
+  // Create log object
+  const logEntry = {
+    date: today,
+    wing: deptName,
+    records: records
+  };
+
+  // Get existing history and remove any existing entry for today+wing (replace)
+  const history = getAttendanceHistory();
+  const filtered = history.filter(h => !(h.date === today && h.wing === deptName));
+  filtered.push(logEntry);
+  localStorage.setItem(LS_ATTENDANCE_HISTORY, JSON.stringify(filtered));
+
+  // Refresh history display
+  renderAttendanceHistory();
+
+  // Provide summary
+  const present = records.filter(r => r.status === "Present").length;
+  const absent = records.filter(r => r.status === "Absent").length;
+  const excused = records.filter(r => r.status === "Excused").length;
   alert(
-    `Attendance ledger committed. ${presentMembers.length} member(s) recorded as present.`,
+    `✅ Attendance saved for ${deptName} on ${today}.\n` +
+    `Present: ${present} | Absent: ${absent} | Excused: ${excused}`
   );
 }
 
+// Get attendance history from localStorage
 function getAttendanceHistory() {
   const raw = localStorage.getItem(LS_ATTENDANCE_HISTORY);
   return raw ? JSON.parse(raw) : [];
 }
 
-function setAttendanceHistory(list) {
-  localStorage.setItem(LS_ATTENDANCE_HISTORY, JSON.stringify(list));
-}
-
-function refreshAttendanceHistoryView() {
-  const listContainer = document.getElementById("attendanceHistoryList");
-  if (!listContainer) return;
+// Render attendance history logs
+function renderAttendanceHistory() {
+  const container = document.getElementById("attendance-history-list");
+  if (!container) return;
 
   const history = getAttendanceHistory();
+
   if (!history || history.length === 0) {
-    listContainer.innerHTML =
-      "<p class='text-muted'>No attendance history recorded yet.</p>";
+    container.innerHTML = '<p class="text-muted">No attendance logs saved yet.</p>';
     return;
   }
 
-  listContainer.innerHTML = history
-    .map(
-      (h) => `
-      <div class="attendance-history-item">
-        <span class="history-date">${escapeHtml(h.date)}</span>
-        <span class="history-details">
-          ${escapeHtml(h.service)} - ${escapeHtml(h.department)}
-        </span>
-        <span class="history-present-count">${h.presentCount} Present</span>
+  // Show newest first
+  const sorted = [...history].reverse();
+
+  container.innerHTML = sorted.map(h => {
+    const present = (h.records || []).filter(r => r.status === "Present").length;
+    const absent = (h.records || []).filter(r => r.status === "Absent").length;
+    const excused = (h.records || []).filter(r => r.status === "Excused").length;
+    const total = (h.records || []).length;
+
+    return `
+      <div class="history-log-card">
+        <span class="log-date">📅 ${escapeHtml(h.date)}</span>
+        <span class="log-wing">${escapeHtml(h.wing)}</span>
+        <div class="log-summary">
+          <span class="log-present-count">✅ ${present}</span>
+          <span class="log-absent-count">❌ ${absent}</span>
+          <span class="log-excused-count">⚠️ ${excused}</span>
+          <span style="color:var(--text-muted);">👥 ${total}</span>
+        </div>
       </div>
-    `,
-    )
-    .join("");
+    `;
+  }).join("");
 }
 
 function loadNonWorkersPanelRegistry() {
@@ -849,7 +813,7 @@ function loadNonWorkersPanelRegistry() {
 }
 
 // ====================================================================
-// 9. FINANCIAL LOGS TERMINAL (TITHES)
+// 9. VISITOR LOGS TERMINAL (FIRST-TIME VISITORS)
 // ====================================================================
 async function submitVisitorForm(e) {
   e.preventDefault();
@@ -863,8 +827,14 @@ async function submitVisitorForm(e) {
     date_of_visit: new Date().toISOString().split("T")[0],
   };
 
-  await _supabase.from("visitors").insert(payload);
+  // Try Supabase insert, but continue even if it fails
+  try {
+    await _supabase.from("visitors").insert(payload);
+  } catch (supabaseError) {
+    console.warn("Supabase visitor insert failed, saving locally only:", supabaseError.message);
+  }
 
+  // Always save to localStorage regardless of Supabase success
   const visitorsRaw = localStorage.getItem("wscf_first_time_visitors");
   const visitors = visitorsRaw ? JSON.parse(visitorsRaw) : [];
   visitors.unshift({
@@ -885,25 +855,65 @@ async function submitVisitorForm(e) {
 
 async function loadVisitorLedgerRecords() {
   const box = document.getElementById("visitor-ledger-container");
-  const { data: visitors } = await _supabase
-    .from("visitors")
-    .select("*")
-    .eq("division_id", activeDivisionId)
-    .order("id", { ascending: false });
+  
+  // Try to get visitors from Supabase
+  let supabaseVisitors = [];
+  try {
+    const { data: visitors, error } = await _supabase
+      .from("visitors")
+      .select("*")
+      .eq("division_id", activeDivisionId)
+      .order("id", { ascending: false });
+    
+    if (!error && visitors) {
+      supabaseVisitors = visitors;
+    }
+  } catch (supabaseError) {
+    console.warn("Supabase visitor query failed, using localStorage only:", supabaseError.message);
+  }
 
-  if (!visitors || visitors.length === 0) {
+  // Also get visitors from localStorage
+  const visitorsRaw = localStorage.getItem("wscf_first_time_visitors");
+  let localVisitors = [];
+  try {
+    localVisitors = visitorsRaw ? JSON.parse(visitorsRaw) : [];
+    if (!Array.isArray(localVisitors)) localVisitors = [];
+  } catch (err) {
+    localVisitors = [];
+  }
+
+  // Merge: use localStorage data as primary source (includes entries even if Supabase failed),
+  // but also include Supabase entries that might not be in localStorage
+  const supabaseNames = new Set(supabaseVisitors.map(v => v.full_name));
+  const localNames = new Set(localVisitors.map(v => v.full_name));
+  
+  // Combine: start with localStorage entries, then add Supabase-only entries
+  const mergedVisitors = [...localVisitors];
+  for (const sv of supabaseVisitors) {
+    if (!localNames.has(sv.full_name)) {
+      mergedVisitors.push({
+        full_name: sv.full_name,
+        phone_number: sv.phone_number,
+        invited_by: sv.invited_by,
+        remarks_prayer_request: sv.remarks_prayer_request,
+        date_of_visit: sv.date_of_visit,
+      });
+    }
+  }
+
+  if (!mergedVisitors || mergedVisitors.length === 0) {
     box.innerHTML =
       "<p class='text-muted'>No visitor entries tracking for this ministry division service cycle.</p>";
   } else {
-    box.innerHTML = visitors
+    box.innerHTML = mergedVisitors
       .map(
         (v) => `
           <div class="record-card">
               <div class="record-details">
-                  <div class="record-title">${v.full_name}</div>
-                  <div class="record-sub"><span>Phone: ${v.phone_number}</span></div>
-                  <div class="record-sub"><span>Invited By: ${v.invited_by || "Walk-in"}</span></div>
-                  <div class="record-sub" style="color:var(--text-main); font-style:italic;">"${v.remarks_prayer_request || "No prayer note recorded."}"</div>
+                  <div class="record-title">${escapeHtml(v.full_name)}</div>
+                  <div class="record-sub"><span>Phone: ${escapeHtml(v.phone_number)}</span></div>
+                  <div class="record-sub"><span>Invited By: ${escapeHtml(v.invited_by || "Walk-in")}</span></div>
+                  <div class="record-sub" style="color:var(--text-main); font-style:italic;">"${escapeHtml(v.remarks_prayer_request || "No prayer note recorded.")}"</div>
               </div>
           </div>
       `,
@@ -973,6 +983,8 @@ function renderFirstTimeVisitors() {
 async function submitFinancialLog(e) {
   e.preventDefault();
   const memberId = document.getElementById("financial-member-select").value;
+
+  // Build payload
   const payload = {
     division_id: activeDivisionId,
     member_id: memberId,
@@ -980,8 +992,14 @@ async function submitFinancialLog(e) {
     contribution_type: document.getElementById("fin-type").value,
   };
 
-  await _supabase.from("financial_logs").insert(payload);
+  // Try Supabase insert, but continue even if it fails
+  try {
+    await _supabase.from("financial_logs").insert(payload);
+  } catch (supabaseError) {
+    console.warn("Supabase financial insert failed, saving locally only:", supabaseError.message);
+  }
 
+  // Always save to localStorage regardless of Supabase success
   const membersRaw = localStorage.getItem("wscf_members");
   const members = membersRaw ? JSON.parse(membersRaw) : [];
   const member = members.find((m) => m.local_id == memberId);
@@ -1009,23 +1027,43 @@ async function submitFinancialLog(e) {
 
 async function loadFinancialLedgerRecords() {
   const box = document.getElementById("financial-ledger-container");
-  const { data: logs } = await _supabase
-    .from("financial_logs")
-    .select(
-      `id, amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
-    )
-    .eq("division_id", activeDivisionId)
-    .order("id", { ascending: false });
+  
+  // Try to get logs from Supabase
+  let supabaseLogs = [];
+  try {
+    const { data: logs, error } = await _supabase
+      .from("financial_logs")
+      .select(
+        `id, amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
+      )
+      .eq("division_id", activeDivisionId)
+      .order("id", { ascending: false });
+    
+    if (!error && logs) {
+      supabaseLogs = logs;
+    }
+  } catch (supabaseError) {
+    console.warn("Supabase financial query failed, using localStorage only:", supabaseError.message);
+  }
 
-  if (!logs || logs.length === 0) {
+  // Also get financial records from localStorage
+  const recordsRaw = localStorage.getItem("wscf_financial_records");
+  const records = recordsRaw ? JSON.parse(recordsRaw) : [];
+
+  // If we have either Supabase data OR localStorage data, show them
+  if ((!supabaseLogs || supabaseLogs.length === 0) && (!records || records.length === 0)) {
     box.innerHTML =
       "<p class='text-muted'>No payment entries logged in this terminal cycle.</p>";
     return;
   }
 
-  box.innerHTML = logs
-    .map(
-      (l) => `
+  // Render Supabase records first (they have IDs and can be deleted)
+  let html = "";
+  
+  if (supabaseLogs && supabaseLogs.length > 0) {
+    html += supabaseLogs
+      .map(
+        (l) => `
         <div class="record-card">
             <div class="record-details">
                 <div class="record-title">${l.members ? l.members.first_name + " " + l.members.last_name : "Deleted Member"}</div>
@@ -1037,9 +1075,28 @@ async function loadFinancialLedgerRecords() {
             </div>
         </div>
     `,
-    )
-    .join("");
+      )
+      .join("");
+  }
 
+  // Render localStorage records (no delete button since they have no Supabase ID)
+  if (records && records.length > 0) {
+    html += records
+      .map(
+        (r) => `
+        <div class="record-card">
+            <div class="record-details">
+                <div class="record-title">${escapeHtml(r.contributor_name || "Unknown Member")}</div>
+                <div class="record-sub"><span>Code: ${escapeHtml(r.contributor_id || "N/A")}</span> | <span>Type: ${escapeHtml(r.contribution_type)}</span></div>
+                <div class="record-sub"><span class="record-tag-pill" style="color:var(--accent-success)">Le: ${r.amount}</span></div>
+            </div>
+        </div>
+    `,
+      )
+      .join("");
+  }
+
+  box.innerHTML = html;
   renderFinancialLedger();
 }
 
@@ -1362,17 +1419,52 @@ async function triggerDepartmentRollPrint() {
 
 async function triggerVisitorListPrint() {
   const canvas = document.getElementById("print-hardware-canvas");
-  const { data: visitors } = await _supabase
-    .from("visitors")
-    .select("*")
-    .eq("division_id", activeDivisionId);
+  
+  // Attempt to get visitors from Supabase
+  let supabaseVisitors = [];
+  try {
+    const { data: visitors, error } = await _supabase
+      .from("visitors")
+      .select("*")
+      .eq("division_id", activeDivisionId);
+    if (!error && visitors) {
+      supabaseVisitors = visitors;
+    }
+  } catch (supabaseError) {
+    console.warn("Supabase visitor print query failed, using localStorage:", supabaseError.message);
+  }
+
+  // Also get visitors from localStorage
+  const visitorsRaw = localStorage.getItem("wscf_first_time_visitors");
+  let localVisitors = [];
+  try {
+    localVisitors = visitorsRaw ? JSON.parse(visitorsRaw) : [];
+    if (!Array.isArray(localVisitors)) localVisitors = [];
+  } catch (err) {
+    localVisitors = [];
+  }
+
+  // Merge both sources for print
+  const supabaseNames = new Set(supabaseVisitors.map(v => v.full_name));
+  const localNames = new Set(localVisitors.map(v => v.full_name));
+  
+  const mergedVisitors = [...localVisitors];
+  for (const sv of supabaseVisitors) {
+    if (!localNames.has(sv.full_name)) {
+      mergedVisitors.push({
+        full_name: sv.full_name,
+        phone_number: sv.phone_number,
+        invited_by: sv.invited_by,
+      });
+    }
+  }
 
   let tableRows =
-    visitors && visitors.length > 0
-      ? visitors
+    mergedVisitors && mergedVisitors.length > 0
+      ? mergedVisitors
           .map(
             (v, idx) =>
-              `<tr><td>${idx + 1}</td><td>${v.full_name}</td><td>${v.phone_number}</td><td>${v.invited_by || "Walk-in"}</td></tr>`,
+              `<tr><td>${idx + 1}</td><td>${escapeHtml(v.full_name)}</td><td>${escapeHtml(v.phone_number)}</td><td>${escapeHtml(v.invited_by || "Walk-in")}</td></tr>`,
           )
           .join("")
       : `<tr><td colspan="4" style="text-align:center;">No visitor tracking cards logged.</td></tr>`;
@@ -1395,20 +1487,62 @@ async function triggerVisitorListPrint() {
 
 async function triggerFinancialStatementPrint() {
   const canvas = document.getElementById("print-hardware-canvas");
-  const { data: logs } = await _supabase
-    .from("financial_logs")
-    .select(
-      `amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
-    )
-    .eq("division_id", activeDivisionId);
+  
+  // Attempt to get logs from Supabase
+  let supabaseLogs = [];
+  try {
+    const { data: logs, error } = await _supabase
+      .from("financial_logs")
+      .select(
+        `amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
+      )
+      .eq("division_id", activeDivisionId);
+    if (!error && logs) {
+      supabaseLogs = logs;
+    }
+  } catch (supabaseError) {
+    console.warn("Supabase financial print query failed, using localStorage:", supabaseError.message);
+  }
+
+  // Also get financial records from localStorage
+  const recordsRaw = localStorage.getItem("wscf_financial_records");
+  const localRecords = recordsRaw ? JSON.parse(recordsRaw) : [];
+
+  // Combine both sources for the print
+  let allEntries = [];
+
+  // Add Supabase entries
+  if (supabaseLogs && supabaseLogs.length > 0) {
+    supabaseLogs.forEach(l => {
+      allEntries.push({
+        contributor_id: l.members ? l.members.member_id_code : "N/A",
+        contributor_name: l.members ? l.members.first_name + " " + l.members.last_name : "N/A",
+        contribution_type: l.contribution_type,
+        amount: l.amount,
+      });
+    });
+  }
+
+  // Add localStorage entries
+  if (localRecords && localRecords.length > 0) {
+    localRecords.forEach(r => {
+      allEntries.push({
+        contributor_id: r.contributor_id || "N/A",
+        contributor_name: r.contributor_name || "Unknown Member",
+        contribution_type: r.contribution_type,
+        amount: r.amount,
+      });
+    });
+  }
 
   let runningTotal = 0;
   let tableRows =
-    logs && logs.length > 0
-      ? logs
+    allEntries && allEntries.length > 0
+      ? allEntries
           .map((l, idx) => {
-            runningTotal += parseFloat(l.amount);
-            return `<tr><td>${idx + 1}</td><td>${l.members ? l.members.member_id_code : "Purged"}</td><td>${l.members ? l.members.first_name + " " + l.members.last_name : "N/A"}</td><td>${l.contribution_type}</td><td style="text-align:right;">Le ${parseFloat(l.amount).toFixed(2)}</td></tr>`;
+            const amt = parseFloat(l.amount) || 0;
+            runningTotal += amt;
+            return `<tr><td>${idx + 1}</td><td>${escapeHtml(l.contributor_id)}</td><td>${escapeHtml(l.contributor_name)}</td><td>${escapeHtml(l.contribution_type)}</td><td style="text-align:right;">Le ${amt.toFixed(2)}</td></tr>`;
           })
           .join("")
       : `<tr><td colspan="5" style="text-align:center;">No ledger contribution rows logged.</td></tr>`;
@@ -1448,7 +1582,10 @@ function switchAdminTab(targetPaneId) {
 
   if (targetPaneId === "non-workers-window") loadNonWorkersPanelRegistry();
   if (targetPaneId === "visitors-window") loadVisitorLedgerRecords();
-  if (targetPaneId === "financial-window") loadFinancialLedgerRecords();
+  if (targetPaneId === "financial-window") {
+    loadFinancialLedgerRecords();
+    refreshFinancialAnalytics();
+  }
 }
 
 // Lock Station: prompt for PIN before returning to lockout screen
