@@ -3,7 +3,7 @@
 // ARCHITECTED BY PROSPER (PP STUDIO) | PWA OFFLINE SUPPORT
 // ====================================================================
 
-const CACHE_NAME = 'wscf-cache-v1';
+const CACHE_NAME = 'wscf-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -11,8 +11,8 @@ const ASSETS_TO_CACHE = [
   '/app.js',
   '/manifest.json',
   '/assets/logo.png.jpeg',
-  '/assets/icons/icon-192x192.png',
-  '/assets/icons/icon-512x512.png'
+  '/assets/icons/icon-192x192-v2.png',
+  '/assets/icons/icon-512x512-v2.png'
 ];
 
 // ====================================================================
