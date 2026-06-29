@@ -293,7 +293,6 @@ async function loadPastoralCareAlerts() {
     const { data: attendanceRecords, error } = await _supabase
       .from("attendance_records")
       .select("*")
-      .eq("division_id", activeDivisionId)
       .order("service_date", { ascending: false });
 
     if (error) throw error;
@@ -443,8 +442,7 @@ async function refreshFinancialAnalytics() {
 
     let query = _supabase
       .from("financial_logs")
-      .select("amount, contribution_type, date_logged")
-      .eq("division_id", activeDivisionId);
+      .select("amount, contribution_type, date_logged");
 
     // Apply date filters only if valid dates are provided
     if (startDateInput && startDateInput.trim() !== "") {
@@ -881,7 +879,6 @@ function loadNonWorkersPanelRegistry() {
 async function submitVisitorForm(e) {
   e.preventDefault();
   const payload = {
-    division_id: activeDivisionId,
     full_name: document.getElementById("v-name").value.trim(),
     phone_number: document.getElementById("v-phone").value.trim(),
     invited_by: document.getElementById("v-invited").value.trim() || null,
@@ -925,7 +922,6 @@ async function loadVisitorLedgerRecords() {
     const { data: visitors, error } = await _supabase
       .from("visitors")
       .select("*")
-      .eq("division_id", activeDivisionId)
       .order("id", { ascending: false });
     
     if (!error && visitors) {
@@ -1049,7 +1045,6 @@ async function submitFinancialLog(e) {
 
   // Build payload
   const payload = {
-    division_id: activeDivisionId,
     member_id: memberId,
     amount: parseFloat(document.getElementById("fin-amount").value),
     contribution_type: document.getElementById("fin-type").value,
@@ -1099,7 +1094,6 @@ async function loadFinancialLedgerRecords() {
       .select(
         `id, amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
       )
-      .eq("division_id", activeDivisionId)
       .order("id", { ascending: false });
     
     if (!error && logs) {
@@ -1497,8 +1491,7 @@ async function triggerVisitorListPrint() {
   try {
     const { data: visitors, error } = await _supabase
       .from("visitors")
-      .select("*")
-      .eq("division_id", activeDivisionId);
+      .select("*");
     if (!error && visitors) {
       supabaseVisitors = visitors;
     }
@@ -1568,8 +1561,7 @@ async function triggerFinancialStatementPrint() {
       .from("financial_logs")
       .select(
         `amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
-      )
-      .eq("division_id", activeDivisionId);
+      );
     if (!error && logs) {
       supabaseLogs = logs;
     }
