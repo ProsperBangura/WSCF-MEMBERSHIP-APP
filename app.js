@@ -77,6 +77,21 @@ function initializeLocalStorageKeys() {
 // ====================================================================
 
 // Verify Entered Passcodes Against Tier 2 Master Administrative Security Clearance
+// HTML escape utility to prevent XSS when rendering user data
+function escapeHtml(text) {
+  const amp = '&' + 'amp;';
+  const lt = '&' + 'lt;';
+  const gt = '&' + 'gt;';
+  const quot = '&' + 'quot;';
+  const apos = '&' + '#039;';
+  return (text || '')
+    .replace(/&/g, amp)
+    .replace(/</g, lt)
+    .replace(/>/g, gt)
+    .replace(/"/g, quot)
+    .replace(/'/g, apos);
+}
+
 function verifyTerminalKey() {
   const enteredCode = document
     .getElementById("terminal-pass-code")
