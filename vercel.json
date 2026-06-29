@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "buildCommand": null,
+  "outputDirectory": ".",
+  "routes": [
+    {
+      "src": "^/(assets/.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "^/(public/.*)",
+      "dest": "/public/$1"
+    },
+    {
+      "src": "^/(sw\\.js|app\\.js|style\\.css|manifest\\.json|favicon\\.ico)",
+      "dest": "/$1"
+    },
+    {
+      "src": "^/(.+\\.[a-z0-9]+)$",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    }
+  ]
+}
