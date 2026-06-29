@@ -269,6 +269,35 @@ async function submitMemberForm(e) {
     members.push(newMember);
     localStorage.setItem("wscf_members", JSON.stringify(members));
 
+    // Attempt to sync to Supabase if client is available
+    if (_supabase) {
+      try {
+        const supabaseMemberPayload = {
+          branch_id: 1,
+          member_id_code: memberIdCode,
+          first_name: firstName,
+          last_name: lastName,
+          full_address: fullAddress,
+          date_of_birth: dob,
+          gender: gender,
+          contact_number_1: primaryPhone,
+          contact_number_2: secondaryPhone || null,
+          email_address: email || null,
+          occupation: occupation || null,
+          marital_status: maritalStatus,
+          nationality: nationality,
+          emergency_contact_name: emergencyName,
+          emergency_contact_phone: emergencyPhone,
+          want_to_join_department: wantToJoinDept,
+          baptized: baptized,
+          photo_data: photoData || null,
+        };
+        await _supabase.from("members").insert(supabaseMemberPayload);
+      } catch (supabaseError) {
+        console.warn("Supabase member sync failed, saved locally only:", supabaseError.message);
+      }
+    }
+
     alert("Profile Saved Successfully!");
     clearRegistryFormFields();
     loadAllMasterLedgerData();
@@ -285,6 +314,12 @@ async function submitMemberForm(e) {
 
 async function loadPastoralCareAlerts() {
   try {
+    if (!_supabase) {
+      document.getElementById("pastoral-alerts-container").innerHTML =
+        '<p class="text-muted">Database connection unavailable.</p>';
+      return;
+    }
+
     const container = document.getElementById("pastoral-alerts-container");
     container.innerHTML =
       '<p class="text-muted">Scanning attendance records for at-risk members...</p>';
@@ -420,6 +455,12 @@ async function loadPastoralCareAlerts() {
 
 async function refreshFinancialAnalytics() {
   try {
+    // If Supabase client is unavailable, rely solely on localStorage
+    if (!_supabase) {
+      loadFinancialAnalyticsFromLocalStorage();
+      return;
+    }
+
     // If date elements fail or are empty, bypass date check and get ALL records
     let startDateInput = "";
     let endDateInput = "";
@@ -511,12 +552,53 @@ async function refreshFinancialAnalytics() {
       `Le ${metrics.grandTotal.toFixed(2)}`;
   } catch (error) {
     console.error("Failed to refresh financial analytics:", error.message);
-    const errorDisplay = document.getElementById("total-tithes-value");
-    if (errorDisplay) errorDisplay.innerText = "Le 0.00";
-    const errorDisplay2 = document.getElementById("total-welfare-value");
-    if (errorDisplay2) errorDisplay2.innerText = "Le 0.00";
-    const errorDisplay3 = document.getElementById("total-consolidated-value");
-    if (errorDisplay3) errorDisplay3.innerText = "Le 0.00";
+    // Fallback to localStorage-only calculation
+    loadFinancialAnalyticsFromLocalStorage();
+  }
+}
+
+// Load financial analytics from localStorage only when Supabase is unavailable
+function loadFinancialAnalyticsFromLocalStorage() {
+  try {
+    const recordsRaw = localStorage.getItem("wscf_financial_records");
+    const records = recordsRaw ? JSON.parse(recordsRaw) : [];
+
+    const metrics = records.reduce(
+      (acc, record) => {
+        const numericValue =
+          parseFloat(String(record.amount || 0).replace(/[^0-9.]/g, "")) || 0;
+
+        if (record.contribution_type === "Tithe") {
+          acc.totalTithes += numericValue;
+        } else if (record.contribution_type === "Welfare Contribution") {
+          acc.totalWelfare += numericValue;
+        }
+
+        acc.grandTotal += numericValue;
+        return acc;
+      },
+      {
+        totalTithes: 0,
+        totalWelfare: 0,
+        grandTotal: 0,
+      },
+    );
+
+    const totalTithesEl = document.getElementById("total-tithes-value");
+    const totalWelfareEl = document.getElementById("total-welfare-value");
+    const totalConsolidatedEl = document.getElementById("total-consolidated-value");
+
+    if (totalTithesEl) totalTithesEl.innerText = `Le ${metrics.totalTithes.toFixed(2)}`;
+    if (totalWelfareEl) totalWelfareEl.innerText = `Le ${metrics.totalWelfare.toFixed(2)}`;
+    if (totalConsolidatedEl) totalConsolidatedEl.innerText = `Le ${metrics.grandTotal.toFixed(2)}`;
+  } catch (error) {
+    console.error("Failed to load financial analytics from localStorage:", error);
+    const totalTithesEl = document.getElementById("total-tithes-value");
+    const totalWelfareEl = document.getElementById("total-welfare-value");
+    const totalConsolidatedEl = document.getElementById("total-consolidated-value");
+    if (totalTithesEl) totalTithesEl.innerText = "Le 0.00";
+    if (totalWelfareEl) totalWelfareEl.innerText = "Le 0.00";
+    if (totalConsolidatedEl) totalConsolidatedEl.innerText = "Le 0.00";
   }
 }
 
@@ -879,6 +961,7 @@ function loadNonWorkersPanelRegistry() {
 async function submitVisitorForm(e) {
   e.preventDefault();
   const payload = {
+    branch_id: 1,
     full_name: document.getElementById("v-name").value.trim(),
     phone_number: document.getElementById("v-phone").value.trim(),
     invited_by: document.getElementById("v-invited").value.trim() || null,
@@ -889,7 +972,9 @@ async function submitVisitorForm(e) {
 
   // Try Supabase insert, but continue even if it fails
   try {
-    await _supabase.from("visitors").insert(payload);
+    if (_supabase) {
+      await _supabase.from("visitors").insert(payload);
+    }
   } catch (supabaseError) {
     console.warn("Supabase visitor insert failed, saving locally only:", supabaseError.message);
   }
@@ -919,13 +1004,15 @@ async function loadVisitorLedgerRecords() {
   // Try to get visitors from Supabase
   let supabaseVisitors = [];
   try {
-    const { data: visitors, error } = await _supabase
-      .from("visitors")
-      .select("*")
-      .order("id", { ascending: false });
-    
-    if (!error && visitors) {
-      supabaseVisitors = visitors;
+    if (_supabase) {
+      const { data: visitors, error } = await _supabase
+        .from("visitors")
+        .select("*")
+        .order("id", { ascending: false });
+      
+      if (!error && visitors) {
+        supabaseVisitors = visitors;
+      }
     }
   } catch (supabaseError) {
     console.warn("Supabase visitor query failed, using localStorage only:", supabaseError.message);
@@ -1045,6 +1132,7 @@ async function submitFinancialLog(e) {
 
   // Build payload
   const payload = {
+    branch_id: 1,
     member_id: memberId,
     amount: parseFloat(document.getElementById("fin-amount").value),
     contribution_type: document.getElementById("fin-type").value,
@@ -1052,7 +1140,9 @@ async function submitFinancialLog(e) {
 
   // Try Supabase insert, but continue even if it fails
   try {
-    await _supabase.from("financial_logs").insert(payload);
+    if (_supabase) {
+      await _supabase.from("financial_logs").insert(payload);
+    }
   } catch (supabaseError) {
     console.warn("Supabase financial insert failed, saving locally only:", supabaseError.message);
   }
@@ -1089,15 +1179,17 @@ async function loadFinancialLedgerRecords() {
   // Try to get logs from Supabase
   let supabaseLogs = [];
   try {
-    const { data: logs, error } = await _supabase
-      .from("financial_logs")
-      .select(
-        `id, amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
-      )
-      .order("id", { ascending: false });
-    
-    if (!error && logs) {
-      supabaseLogs = logs;
+    if (_supabase) {
+      const { data: logs, error } = await _supabase
+        .from("financial_logs")
+        .select(
+          `id, amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
+        )
+        .order("id", { ascending: false });
+      
+      if (!error && logs) {
+        supabaseLogs = logs;
+      }
     }
   } catch (supabaseError) {
     console.warn("Supabase financial query failed, using localStorage only:", supabaseError.message);
@@ -1223,7 +1315,13 @@ renderFinancialLedger();
 async function deleteFinancialRecord(id) {
   if (!confirm("Are you sure you want to permanently erase this transaction?"))
     return;
-  await _supabase.from("financial_logs").delete().eq("id", id);
+  try {
+    if (_supabase) {
+      await _supabase.from("financial_logs").delete().eq("id", id);
+    }
+  } catch (supabaseError) {
+    console.warn("Supabase delete failed:", supabaseError.message);
+  }
   loadFinancialLedgerRecords();
 }
 
@@ -1439,17 +1537,44 @@ async function triggerDepartmentRollPrint() {
   const deptName = document.getElementById("print-dept-selector").value;
   const canvas = document.getElementById("print-hardware-canvas");
 
-  const { data: dRow } = await _supabase
-    .from("departments")
-    .select("id")
-    .eq("dept_name", deptName)
-    .single();
-  if (!dRow) return;
+  if (!_supabase) {
+    canvas.innerHTML = `
+      <div class="print-document-header">
+        <div class="print-title-block">
+          <h1>WSCF Departmental Physical Roll Sheet</h1>
+          <p>Wing: ${escapeHtml(deptName)}</p>
+        </div>
+      </div>
+      <p>Database connection unavailable. Cannot print departmental roll.</p>`;
+    window.print();
+    return;
+  }
 
-  const { data: workers } = await _supabase
-    .from("member_departments")
-    .select("members(member_id_code, first_name, last_name)")
-    .eq("department_id", dRow.id);
+  try {
+    const { data: dRow } = await _supabase
+      .from("departments")
+      .select("id")
+      .eq("dept_name", deptName)
+      .single();
+    if (!dRow) return;
+
+    const { data: workers } = await _supabase
+      .from("member_departments")
+      .select("members(member_id_code, first_name, last_name)")
+      .eq("department_id", dRow.id);
+  } catch (supabaseError) {
+    console.warn("Supabase department roll print failed:", supabaseError.message);
+    canvas.innerHTML = `
+      <div class="print-document-header">
+        <div class="print-title-block">
+          <h1>WSCF Departmental Physical Roll Sheet</h1>
+          <p>Wing: ${escapeHtml(deptName)}</p>
+        </div>
+      </div>
+      <p>Database connection error. Cannot print departmental roll.</p>`;
+    window.print();
+    return;
+  }
 
   let tableRows =
     workers && workers.length > 0
@@ -1489,11 +1614,13 @@ async function triggerVisitorListPrint() {
   // Attempt to get visitors from Supabase
   let supabaseVisitors = [];
   try {
-    const { data: visitors, error } = await _supabase
-      .from("visitors")
-      .select("*");
-    if (!error && visitors) {
-      supabaseVisitors = visitors;
+    if (_supabase) {
+      const { data: visitors, error } = await _supabase
+        .from("visitors")
+        .select("*");
+      if (!error && visitors) {
+        supabaseVisitors = visitors;
+      }
     }
   } catch (supabaseError) {
     console.warn("Supabase visitor print query failed, using localStorage:", supabaseError.message);
@@ -1557,13 +1684,15 @@ async function triggerFinancialStatementPrint() {
   // Attempt to get logs from Supabase
   let supabaseLogs = [];
   try {
-    const { data: logs, error } = await _supabase
-      .from("financial_logs")
-      .select(
-        `amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
-      );
-    if (!error && logs) {
-      supabaseLogs = logs;
+    if (_supabase) {
+      const { data: logs, error } = await _supabase
+        .from("financial_logs")
+        .select(
+          `amount, contribution_type, date_logged, members(first_name, last_name, member_id_code)`,
+        );
+      if (!error && logs) {
+        supabaseLogs = logs;
+      }
     }
   } catch (supabaseError) {
     console.warn("Supabase financial print query failed, using localStorage:", supabaseError.message);
